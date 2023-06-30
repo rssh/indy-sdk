@@ -79,7 +79,8 @@ indy = { path = "../wrappers/rust" }
 indy-sys = { path = "../wrappers/rust/indy-sys" }
 futures = "0.1.28"
 sodiumoxide = {version = "0.0.16"}
-openssl = "0.10"
+openssl-sys = "0.9.90"
+# openssl = "0.10"
 dirs = "2.0.2"
 
 [[bench]]
