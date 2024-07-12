@@ -131,12 +131,12 @@ pub enum IssuerCommand {
         RevocationRegistryId, //revocation registry id
         String, //credential revoc id
         Box<dyn Fn(IndyResult<String>) + Send>),
-    /*    RecoverCredential(
+    RecoverCredential(
             WalletHandle,
             i32, // blob storage reader config handle
-            String, //revocation revoc id
+            RevocationRegistryId, //revocation revoc id
             String, //credential revoc id
-            Box<dyn Fn(Result<String, IndyError>) + Send>),*/
+            Box<dyn Fn(IndyResult<String>) + Send>),
     MergeRevocationRegistryDeltas(
         RevocationRegistryDelta, //revocation registry delta
         RevocationRegistryDelta, //other revocation registry delta
@@ -220,10 +220,10 @@ impl IssuerCommandExecutor {
                 debug!(target: "issuer_command_executor", "RevokeCredential command received");
                 cb(self.revoke_credential(wallet_handle, blob_storage_reader_handle, &rev_reg_id, &cred_revoc_id));
             }
-            /*            IssuerCommand::RecoverCredential(wallet_handle, blob_storage_reader_handle, rev_reg_id, cred_revoc_id, cb) => {
+            IssuerCommand::RecoverCredential(wallet_handle, blob_storage_reader_handle, rev_reg_id, cred_revoc_id, cb) => {
                             debug!(target: "issuer_command_executor", "RecoverCredential command received");
                             cb(self.recovery_credential(wallet_handle, blob_storage_reader_handle, &rev_reg_id, &cred_revoc_id));
-                        }*/
+            }
             IssuerCommand::MergeRevocationRegistryDeltas(rev_reg_delta, other_rev_reg_delta, cb) => {
                 debug!(target: "issuer_command_executor", "MergeRevocationRegistryDeltas command received");
                 cb(self.merge_revocation_registry_deltas(&mut RevocationRegistryDeltaV1::from(rev_reg_delta),
@@ -855,7 +855,7 @@ impl IssuerCommandExecutor {
         Ok(rev_reg_delta_json)
     }
 
-    fn _recovery_credential(&self,
+    fn recovery_credential(&self,
                             wallet_handle: WalletHandle,
                             blob_storage_reader_handle: i32,
                             rev_reg_id: &RevocationRegistryId,

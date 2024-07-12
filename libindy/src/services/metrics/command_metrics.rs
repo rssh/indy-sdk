@@ -67,6 +67,9 @@ impl From<&IssuerCommand> for CommandMetric {
             IssuerCommand::RevokeCredential(_, _, _, _, _) => {
                 CommandMetric::IssuerCommandRevokeCredential
             }
+            IssuerCommand::RecoverCredential(_, _, _, _, _) => {
+                CommandMetric::IssuerCommandRecoverCredential
+            }
             IssuerCommand::MergeRevocationRegistryDeltas(_, _, _) => {
                 CommandMetric::IssuerCommandMergeRevocationRegistryDeltas
             }
@@ -340,6 +343,7 @@ pub enum CommandMetric {
     IssuerCommandCreateCredentialOffer,
     IssuerCommandCreateCredential,
     IssuerCommandRevokeCredential,
+    IssuerCommandRecoverCredential,
     IssuerCommandMergeRevocationRegistryDeltas,
     // ProverCommand
     ProverCommandCreateMasterSecret,
