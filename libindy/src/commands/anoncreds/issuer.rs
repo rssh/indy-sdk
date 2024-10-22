@@ -56,7 +56,7 @@ use crate::services::pool::PoolService;
 use indy_wallet::{RecordOptions, WalletService};
 
 use super::tails::{SDKTailsAccessor, store_tails_from_generator};
-use indy_api_types::{WalletHandle, CommandHandle};
+use indy_api_types::{wallet, CommandHandle, WalletHandle};
 use indy_utils::next_command_handle;
 
 pub enum IssuerCommand {
@@ -141,6 +141,28 @@ pub enum IssuerCommand {
         RevocationRegistryDelta, //revocation registry delta
         RevocationRegistryDelta, //other revocation registry delta
         Box<dyn Fn(IndyResult<String>) + Send>),
+    CheckRevocationRegistryExists(
+        WalletHandle,
+        DidValue, // issuer did
+        String, // type
+        String, // tag
+        CredentialDefinitionId, // revocation registry id
+        Box<dyn Fn(IndyResult<Option<(String,String,String)>>) + Send>),  
+    CreateOnlyRevocationRegistry(
+        DidValue, // issuer did
+        Option<String>, // type
+        String, // tag
+        CredentialDefinition, // credential definition 
+        RevocationRegistryConfig, // config
+        i32, // tails writer handle
+        Box<dyn Fn(IndyResult<(String, String, String, String)>) + Send>),      
+    StoreOnlyRevocationRegistry(
+        WalletHandle,
+        RevocationRegistryId, // revocation registry id
+        RevocationRegistryDefinition, // revocation registry definition
+        RevocationRegistry, // revocation registry
+        RevocationRegistryDefinitionPrivate, // revocation registry private definition
+        Box<dyn Fn(IndyResult<()>) + Send>),    
 }
 
 pub struct IssuerCommandExecutor {
@@ -228,6 +250,19 @@ impl IssuerCommandExecutor {
                 debug!(target: "issuer_command_executor", "MergeRevocationRegistryDeltas command received");
                 cb(self.merge_revocation_registry_deltas(&mut RevocationRegistryDeltaV1::from(rev_reg_delta),
                                                          &RevocationRegistryDeltaV1::from(other_rev_reg_delta)));
+            }
+            IssuerCommand::CreateOnlyRevocationRegistry(issuer_did, type_ ,tag ,cred_def_json , config , tails_writer_handle  , cb ) => {
+                debug!(target: "issuer_command_executor", "CreateOnlyRevocationRegistry command received");
+                cb(self.create_only_revocation_registry(&issuer_did, type_.as_ref().map(String::as_str), &tag, &cred_def_json, &config, tails_writer_handle));
+            }
+            IssuerCommand::CheckRevocationRegistryExists(wallet_handle,issuer_did , _type, tag,  cred_def_id , cb ) => {
+                debug!(target: "issuer_command_executor", "CheckRevocationRegistryExists command received");
+
+                cb(self.check_revocation_registry_exists(wallet_handle, &issuer_did, Some(&_type), tag, &cred_def_id));
+            },
+            IssuerCommand::StoreOnlyRevocationRegistry(wallet_handle, rev_reg_id, rev_reg_def, rev_reg, rev_reg_priv, cb) => {
+                debug!(target: "issuer_command_executor", "StoreOnlyRevocationRegistry command received");
+                cb(self.store_only_revocation_registry(wallet_handle, &rev_reg_id, &rev_reg_def, &rev_reg, &rev_reg_priv));
             }
         };
     }
@@ -576,7 +611,7 @@ impl IssuerCommandExecutor {
 
         if let (Ok(rev_reg_def), Ok(rev_reg)) = (self.wallet_service.get_indy_record_value::<RevocationRegistryDefinition>(wallet_handle, &rev_reg_id.0, &RecordOptions::id_value()),
                                                  self.wallet_service.get_indy_record_value::<RevocationRegistry>(wallet_handle, &rev_reg_id.0, &RecordOptions::id_value())) {
-            return Ok((cred_def_id.0.to_string(), rev_reg_def, rev_reg));
+            return Ok((rev_reg_id.0.to_string(), rev_reg_def, rev_reg));
         }
 
         let cred_def: CredentialDefinition = self.wallet_service.get_indy_object(wallet_handle, &cred_def_id.0, &RecordOptions::id_value())?;
@@ -795,6 +830,161 @@ impl IssuerCommandExecutor {
 
         Ok((cred_json, cred_rev_id, rev_reg_delta_json))
     }
+
+    fn check_revocation_registry_exists(&self,
+        wallet_handle: WalletHandle,
+        issuer_did: &DidValue,
+        type_: Option<&str>,
+        tag: String,
+        cred_def_id: &CredentialDefinitionId
+    ) -> IndyResult<Option<(String,String,String)>>{
+        let rev_reg_type = if let Some(type_) = type_ {
+            serde_json::from_str::<RegistryType>(&format!("\"{}\"", type_))
+.                                   to_indy(IndyErrorKind::InvalidStructure, "Invalid Registry Type format")?
+        } else {
+            RegistryType::CL_ACCUM
+        };
+        let rev_reg_id = RevocationRegistryId::new(&issuer_did, &cred_def_id, &rev_reg_type.to_str(), & tag);
+        if let (Ok(rev_reg_def), Ok(rev_reg), Ok(rev_reg_priv)) = (self.wallet_service.get_indy_record_value::<RevocationRegistryDefinition>(wallet_handle, &rev_reg_id.0, &RecordOptions::id_value()),
+            self.wallet_service.get_indy_record_value::<RevocationRegistry>(wallet_handle, &rev_reg_id.0, &RecordOptions::id_value()),
+            self.wallet_service.get_indy_record_value::<RevocationRegistryDefinitionPrivate>(wallet_handle, &rev_reg_id.0, &RecordOptions::id_value())) {
+            return Ok(Some((rev_reg_id.0.to_string(), rev_reg_def, rev_reg)));
+        } else {
+            return Ok(None);
+        }
+    }
+
+    fn create_only_revocation_registry(&self,
+        issuer_did: &DidValue,
+        type_: Option<&str>,
+        tag: &str,
+        cred_def: &CredentialDefinition,
+        config: &RevocationRegistryConfig,
+        tails_writer_handle: i32) -> IndyResult<(String, String, String, String)> {
+            debug!("create_only_revocation_registry >>>  issuer_did: {:?}, type_: {:?}, tag: {:?}, cred_def_id: {:?}, config: {:?}, \
+                tails_handle: {:?}", issuer_did, type_, tag, cred_def, config, tails_writer_handle);
+
+
+
+            let cred_def_v1 = match cred_def {
+                CredentialDefinition::CredentialDefinitionV1(cred_def_v1) =>  cred_def_v1,
+                _ => return Err(IndyError::from_msg(IndyErrorKind::InvalidStructure, "Unsupported Credential Definition type"))
+            };
+
+            let cred_def_id = & cred_def_v1.id;
+        
+            match (issuer_did.get_method(), cred_def_id.get_method()) {
+                (None, Some(_)) => {
+                    return Err(IndyError::from_msg(IndyErrorKind::InvalidStructure, "You can't use unqualified Did with fully qualified Credential Definition"));
+                }
+                (Some(_), None) => {
+                    return Err(IndyError::from_msg(IndyErrorKind::InvalidStructure, "You can't use fully qualified Did with unqualified Credential Definition"));
+                }
+                _ => {}
+            };
+
+            let rev_reg_type = if let Some(type_) = type_ {
+                        serde_json::from_str::<RegistryType>(&format!("\"{}\"", type_))
+.                                   to_indy(IndyErrorKind::InvalidStructure, "Invalid Registry Type format")?
+                    } else {
+                        RegistryType::CL_ACCUM
+                    };
+
+            let issuance_type = config.issuance_type.clone().unwrap_or(IssuanceType::ISSUANCE_ON_DEMAND);
+            let max_cred_num = config.max_cred_num.unwrap_or(100000);
+
+            
+            let rev_reg_id = RevocationRegistryId::new(&issuer_did, & cred_def_id, &rev_reg_type.to_str(), tag);
+
+            //let cred_def: CredentialDefinition = 
+            //  self.wallet_service.get_indy_object(wallet_handle, &cred_def_id.0, &RecordOptions::id_value())?;
+
+            let (revoc_public_keys, revoc_key_private, revoc_registry, mut revoc_tails_generator) = 
+                self.anoncreds_service.issuer.new_revocation_registry(cred_def_v1,
+                                      max_cred_num,
+                                      issuance_type.to_bool(),
+                                      &issuer_did)?;
+            
+
+            let (tails_location, tails_hash) = store_tails_from_generator(self.blob_storage_service.clone(), tails_writer_handle, &mut revoc_tails_generator)?;
+
+            let revoc_reg_def_value = RevocationRegistryDefinitionValue {
+                max_cred_num,
+                issuance_type,
+                public_keys: revoc_public_keys,
+                tails_location,
+                tails_hash,
+            };
+
+            let revoc_reg_def = RevocationRegistryDefinition::RevocationRegistryDefinitionV1(
+                            RevocationRegistryDefinitionV1 {
+                                id: rev_reg_id.clone(),
+                                revoc_def_type: rev_reg_type,
+                                tag: tag.to_string(),
+                                cred_def_id: cred_def_id.clone(),
+                                value: revoc_reg_def_value,
+                            });
+
+            let revoc_reg = RevocationRegistry::RevocationRegistryV1(
+                            RevocationRegistryV1 {
+                                value: revoc_registry
+                            }
+            );
+
+            let revoc_reg_def_priv = RevocationRegistryDefinitionPrivate { value: revoc_key_private };
+
+            //let revoc_reg_def_json = self.wallet_service.add_indy_object(wallet_handle, &rev_reg_id.0, &revoc_reg_def, &HashMap::new())?;
+
+            let revoc_reg_def_json = serde_json::to_string(&revoc_reg_def)
+                .to_indy(IndyErrorKind::InvalidState, "Cannot serialize RevocationRegistryDefinition")?; 
+
+            //let revoc_reg_json = self.wallet_service.add_indy_object(wallet_handle, &rev_reg_id.0, &revoc_reg, &HashMap::new())?;
+            let revoc_reg_json = serde_json::to_string(&revoc_reg)
+                .to_indy(IndyErrorKind::InvalidState, "Cannot serialize RevocationRegistry")?;
+
+            let revoc_reg_def_priv_json = serde_json::to_string(&revoc_reg_def_priv)
+                                                                  .to_indy(IndyErrorKind::InvalidState, "Cannot serialize RevocationRegistryDefinitionPrivate")?;
+            //self.wallet_service.add_indy_object(wallet_handle, &rev_reg_id.0, &revoc_reg_def_priv, &HashMap::new())?;
+
+            let rev_reg_info = RevocationRegistryInfo {
+                id: rev_reg_id.clone(),
+                curr_id: 0,
+                used_ids: HashSet::new(),
+            };
+
+            //self.wallet_service.add_indy_object(wallet_handle, &rev_reg_id.0, &rev_reg_info, &HashMap::new())?;
+
+            debug!("create_only_revocation_registry <<< rev_reg_id: {:?}, revoc_reg_def_json: {:?}, revoc_reg_json: {:?}", rev_reg_id, revoc_reg_def_json, revoc_reg_json);
+
+            Ok((rev_reg_id.0, revoc_reg_def_json, revoc_reg_json, revoc_reg_def_priv_json))
+    }
+
+    fn store_only_revocation_registry(&self,
+        wallet_handle: WalletHandle,
+        rev_reg_id: &RevocationRegistryId,
+        revoc_reg_def: &RevocationRegistryDefinition,
+        revoc_reg: &RevocationRegistry,
+        revoc_reg_def_priv: &RevocationRegistryDefinitionPrivate) -> IndyResult<()> {
+
+            let revoc_reg_def_json = self.wallet_service.add_indy_object(wallet_handle, &rev_reg_id.0, &revoc_reg_def, &HashMap::new())?;
+
+            let revoc_reg_json = self.wallet_service.add_indy_object(wallet_handle, &rev_reg_id.0, &revoc_reg, &HashMap::new())?;
+        
+            self.wallet_service.add_indy_object(wallet_handle, &rev_reg_id.0, &revoc_reg_def_priv, &HashMap::new())?;
+        
+            let rev_reg_info = RevocationRegistryInfo {
+                    id: rev_reg_id.clone(),
+                    curr_id: 0,
+                    used_ids: HashSet::new(),
+            };
+        
+            self.wallet_service.add_indy_object(wallet_handle, &rev_reg_id.0, &rev_reg_info, &HashMap::new())?;
+        
+            Ok(())
+    }
+
+
+
 
     fn revoke_credential(&self,
                          wallet_handle: WalletHandle,

@@ -72,7 +72,16 @@ impl From<&IssuerCommand> for CommandMetric {
             }
             IssuerCommand::MergeRevocationRegistryDeltas(_, _, _) => {
                 CommandMetric::IssuerCommandMergeRevocationRegistryDeltas
-            }
+            },
+            IssuerCommand::CheckRevocationRegistryExists(_,_ ,_ ,_ ,_ ,_ ) => {
+                CommandMetric::IssuerCommandChecKRevocationRegistryExistence
+            },
+            IssuerCommand::CreateOnlyRevocationRegistry(_,_ ,_ ,_ ,_ ,_ , _ ) => {
+                CommandMetric::IssuerCommandCreateOnlyRevocationRegistry
+            },
+            IssuerCommand::StoreOnlyRevocationRegistry(_,_ ,_ ,_ ,_ ,_ ) => {
+                CommandMetric::IssuerCommandStoreOnlyRevocationRegistry
+            },
         }
     }
 }
@@ -98,6 +107,7 @@ impl From<&ProverCommand> for CommandMetric {
             ProverCommand::CreateProof(_, _, _, _, _, _, _, _) => { CommandMetric::ProverCommandCreateProof }
             ProverCommand::CreateRevocationState(_, _, _, _, _, _) => { CommandMetric::ProverCommandCreateRevocationState }
             ProverCommand::UpdateRevocationState(_, _, _, _, _, _, _) => { CommandMetric::ProverCommandUpdateRevocationState }
+
         }
     }
 }
@@ -541,4 +551,8 @@ pub enum CommandMetric {
     MetricsCommandCollectMetrics,
     // Exit
     Exit,
+    // Additional proofspace-specific commands
+    IssuerCommandChecKRevocationRegistryExistence,
+    IssuerCommandCreateOnlyRevocationRegistry,
+    IssuerCommandStoreOnlyRevocationRegistry,
 }
