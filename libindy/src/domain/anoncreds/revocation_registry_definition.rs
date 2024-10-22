@@ -188,6 +188,13 @@ impl Validatable for RevocationRegistryDefinition {
     }
 }
 
+impl Validatable for RevocationRegistryDefinitionPrivate {
+    fn validate(&self) -> Result<(), String> {
+        // do nothing
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

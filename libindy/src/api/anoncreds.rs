@@ -12,7 +12,9 @@ use crate::domain::anoncreds::credential_offer::CredentialOffer;
 use crate::domain::anoncreds::credential_request::{CredentialRequest, CredentialRequestMetadata};
 use crate::domain::anoncreds::credential_attr_tag_policy::CredentialAttrTagPolicy;
 use crate::domain::anoncreds::credential::{Credential, CredentialValues};
-use crate::domain::anoncreds::revocation_registry_definition::{RevocationRegistryConfig, RevocationRegistryDefinition, RevocationRegistryId, RevocationRegistryDefinitions};
+use crate::domain::anoncreds::revocation_registry_definition::{RevocationRegistryConfig, RevocationRegistryDefinition, RevocationRegistryId, RevocationRegistryDefinitions, 
+           RevocationRegistryDefinitionPrivate};
+use crate::domain::anoncreds::revocation_registry::RevocationRegistry;           
 use crate::domain::anoncreds::revocation_registry_delta::RevocationRegistryDelta;
 use crate::domain::anoncreds::proof::Proof;
 use crate::domain::anoncreds::proof_request::{ProofRequest, ProofRequestExtraQuery};
@@ -436,7 +438,7 @@ pub extern fn indy_issuer_create_and_store_revoc_reg(command_handle: CommandHand
                                                                           revoc_reg_id: *const c_char,
                                                                           revoc_reg_def_json: *const c_char,
                                                                           revoc_reg_entry_json: *const c_char)>) -> ErrorCode {
-    trace!("indy_issuer_create_and_store_credential_def: >>> wallet_handle: {:?}, issuer_did: {:?}, revoc_def_type: {:?}, tag: {:?}, \
+    trace!("indy_issuer_create_and_store_revoc_reg: >>> wallet_handle: {:?}, issuer_did: {:?}, revoc_def_type: {:?}, tag: {:?}, \
     cred_def_id: {:?}, config_json: {:?}, tails_writer_handle: {:?}", wallet_handle, issuer_did, revoc_def_type, tag, cred_def_id, config_json, tails_writer_handle);
 
     check_useful_validatable_string!(issuer_did, ErrorCode::CommonInvalidParam3, DidValue);
@@ -446,7 +448,7 @@ pub extern fn indy_issuer_create_and_store_revoc_reg(command_handle: CommandHand
     check_useful_validatable_json!(config_json, ErrorCode::CommonInvalidParam7, RevocationRegistryConfig);
     check_useful_c_callback!(cb, ErrorCode::CommonInvalidParam9);
 
-    trace!("indy_issuer_create_and_store_credential_def: entities >>> wallet_handle: {:?}, issuer_did: {:?}, revoc_def_type: {:?}, tag: {:?}, \
+    trace!("indy_issuer_create_and_store_revoc_reg: entities >>> wallet_handle: {:?}, issuer_did: {:?}, revoc_def_type: {:?}, tag: {:?}, \
     cred_def_id: {:?}, config_json: {:?}, tails_writer_handle: {:?}", wallet_handle, issuer_did, revoc_def_type, tag, cred_def_id, config_json, tails_writer_handle);
 
     let result = CommandExecutor::instance()
@@ -462,7 +464,7 @@ pub extern fn indy_issuer_create_and_store_revoc_reg(command_handle: CommandHand
                     tails_writer_handle,
                     Box::new(move |result| {
                         let (err, revoc_reg_id, revoc_reg_def_json, revoc_reg_json) = prepare_result_3!(result, String::new(), String::new(), String::new());
-                        trace!("indy_issuer_create_and_store_credential_def: revoc_reg_id: {:?}, revoc_reg_def_json: {:?}, revoc_reg_json: {:?}",
+                        trace!("indy_issuer_create_and_store_revoc_reg: revoc_reg_id: {:?}, revoc_reg_def_json: {:?}, revoc_reg_json: {:?}",
                                revoc_reg_id, revoc_reg_def_json, revoc_reg_json);
                         let revoc_reg_id = ctypes::string_to_cstring(revoc_reg_id);
                         let revoc_reg_def_json = ctypes::string_to_cstring(revoc_reg_def_json);
@@ -473,10 +475,176 @@ pub extern fn indy_issuer_create_and_store_revoc_reg(command_handle: CommandHand
 
     let res = prepare_result!(result);
 
-    trace!("indy_issuer_create_and_store_credential_def: <<< res: {:?}", res);
+    trace!("indy_issuer_create_and_store_revoc_reg: <<< res: {:?}", res);
 
     res
 }
+
+
+
+/**
+ * Create revcocation registry but not store in wallet, instead return as json and woll be stored in walled 
+ * as separate step.
+ * 
+ * This is needed for cases where reovcation registy creation process is long, we want to run it in separate processs
+ * but don;t want to lock wallet for long time.
+ */
+#[no_mangle]
+pub extern fn indy_issuer_create_only_revoc_reg(command_handle: CommandHandle,
+                                                     issuer_did: *const c_char,
+                                                     revoc_def_type: *const c_char,
+                                                     tag: *const c_char,
+                                                     cred_def_json: *const c_char,
+                                                     config_json: *const c_char,
+                                                     tails_writer_handle: IndyHandle,
+                                                     cb: Option<extern fn(command_handle_: CommandHandle, err: ErrorCode,
+                                                                          revoc_reg_id: *const c_char,
+                                                                          revoc_reg_def_json: *const c_char,
+                                                                          revoc_reg_entry_json: *const c_char,
+                                                                          revoc_reg_priv_json: *const c_char)>) -> ErrorCode {
+    trace!("indy_issuer_create_only_revoc_reg: >>> issuer_did: {:?}, revoc_def_type: {:?}, tag: {:?}, \
+    cred_def_id: {:?}, config_json: {:?}, tails_writer_handle: {:?}", issuer_did, revoc_def_type, tag, cred_def_json, config_json, tails_writer_handle);
+
+    check_useful_validatable_string!(issuer_did, ErrorCode::CommonInvalidParam2, DidValue);
+    check_useful_opt_c_str!(revoc_def_type, ErrorCode::CommonInvalidParam3);
+    check_useful_c_str!(tag, ErrorCode::CommonInvalidParam4);
+    check_useful_validatable_json!(cred_def_json, ErrorCode::CommonInvalidParam5, CredentialDefinition);
+    check_useful_validatable_json!(config_json, ErrorCode::CommonInvalidParam6, RevocationRegistryConfig);
+    check_useful_c_callback!(cb, ErrorCode::CommonInvalidParam8);
+
+    trace!("indy_issuer_create_only_revoc_reg: entities >>> issuer_did: {:?}, revoc_def_type: {:?}, tag: {:?}, \
+    cred_def_json: {:?}, config_json: {:?}, tails_writer_handle: {:?}", issuer_did, revoc_def_type, tag, cred_def_json, config_json, tails_writer_handle);
+
+    let result = CommandExecutor::instance()
+        .send(Command::Anoncreds(
+            AnoncredsCommand::Issuer(
+                IssuerCommand::CreateOnlyRevocationRegistry(
+                    issuer_did,
+                    revoc_def_type,
+                    tag,
+                    cred_def_json,
+                    config_json,
+                    tails_writer_handle,
+                    Box::new(move |result| {
+                        let (err, revoc_reg_id, revoc_reg_def_json, revoc_reg_json, revoc_reg_priv_json) = prepare_result_4!(result, String::new(), String::new(), String::new(), String::new());
+                        trace!("indy_issuer_create_only_revoc_reg: revoc_reg_id: {:?}, revoc_reg_def_json: {:?}, revoc_reg_json: {:?} revoc_reg_priv_json: {:?}",
+                               revoc_reg_id, revoc_reg_def_json, revoc_reg_json, revoc_reg_priv_json);
+                        let revoc_reg_id = ctypes::string_to_cstring(revoc_reg_id);
+                        let revoc_reg_def_json = ctypes::string_to_cstring(revoc_reg_def_json);
+                        let revoc_reg_json = ctypes::string_to_cstring(revoc_reg_json);
+                        let revoc_reg_priv_json = ctypes::string_to_cstring(revoc_reg_priv_json);
+                        cb(command_handle, err, revoc_reg_id.as_ptr(), revoc_reg_def_json.as_ptr(), revoc_reg_json.as_ptr(), revoc_reg_priv_json.as_ptr())
+                    })
+                ))));
+
+    let res = prepare_result!(result);
+
+    trace!("indy_issuer_create_only_revoc_reg: <<< res: {:?}", res);
+
+    res
+}
+
+
+/**
+ * Check if revocation registry exists in wallet.
+ * If yes - return json array with [revicatioN_id,  revocation_definition, revocation_registy],
+ * if not return empty json array.
+ */
+#[no_mangle]
+pub extern fn indy_issuer_check_revoc_reg_exists(command_handle: CommandHandle,
+                                          wallet_handle: WalletHandle,
+                                          issuer_did: *const c_char,
+                                          type_: *const c_char,
+                                          tag: *const c_char,
+                                          cred_def_id: *const c_char,
+                                          cb: Option<extern fn(command_handle_: CommandHandle, err: ErrorCode,
+                                                               reg_info_json: * const c_char )>) -> ErrorCode {
+  trace!("indy_issuer_check_revoc_reg: >>> wallet_handle: {:?}, issuer_did: {:?}, cred_def_id: {:?}", wallet_handle, issuer_did, cred_def_id);
+
+  check_useful_validatable_string!(issuer_did, ErrorCode::CommonInvalidParam3, DidValue);
+  check_useful_c_str!(type_, ErrorCode::CommonInvalidParam4);
+  check_useful_c_str!(tag, ErrorCode::CommonInvalidParam5);
+  check_useful_validatable_string!(cred_def_id, ErrorCode::CommonInvalidParam6, CredentialDefinitionId);
+  check_useful_c_callback!(cb, ErrorCode::CommonInvalidParam7);
+
+  let result = CommandExecutor::instance()
+    .send(Command::Anoncreds(
+      AnoncredsCommand::Issuer(
+        IssuerCommand::CheckRevocationRegistryExists(
+          wallet_handle,
+          issuer_did,
+          type_,
+          tag,
+          cred_def_id,
+          Box::new(move |result| {
+            let (err, opt_reg_info_json) = prepare_result_1!(result, None);
+            trace!("indy_issuer_check_revoc_reg: reg_info_json: {:?}", opt_reg_info_json);
+            match opt_reg_info_json {
+              Some(reg_info_json) => {
+                let json_array = "[ ".to_string() + &reg_info_json.0 +"," + & reg_info_json.1 +"," + & reg_info_json.2 + " ]";
+                let cb_reg_info_json = ctypes::string_to_cstring(json_array);
+                cb(command_handle, err, cb_reg_info_json.as_ptr())
+              },
+              None => {
+                let cb_reg_info_json = ctypes::str_to_cstring("[]");
+                cb(command_handle, err, cb_reg_info_json.as_ptr())
+              }
+            }
+          })
+        )
+      )
+    ));
+    let res = prepare_result!(result);
+    trace!("indy_issuer_check_revoc_reg: <<< res: {:?}", res);
+    res
+}
+
+
+
+#[no_mangle]
+pub extern fn indy_issuer_store_only_revoc_reg(command_handle: CommandHandle,
+                                                        wallet_handle: WalletHandle,
+                                                        revoc_reg_id: *const c_char,
+                                                        revoc_reg_def_json: *const c_char,
+                                                        revoc_reg_json: *const c_char,
+                                                        revoc_reg_priv_json: *const c_char,
+                                                        cb: Option<extern fn(command_handle_: CommandHandle, err: ErrorCode)>) -> ErrorCode {
+    trace!("indy_issuer_store_only_revoc_reg: >>> wallet_handle: {:?}, revoc_reg_id: {:?}, revoc_reg_def_json: {:?}, revoc_reg_entry_json: {:?}, revoc_reg_priv_json: {:?}",
+            wallet_handle, revoc_reg_id, revoc_reg_def_json, revoc_reg_json, revoc_reg_priv_json);
+    
+    check_useful_validatable_string!(revoc_reg_id, ErrorCode::CommonInvalidParam2, RevocationRegistryId);
+    check_useful_validatable_json!(revoc_reg_def_json, ErrorCode::CommonInvalidParam3, RevocationRegistryDefinition);
+    check_useful_validatable_json!(revoc_reg_json, ErrorCode::CommonInvalidParam4, RevocationRegistry);
+    check_useful_validatable_json!(revoc_reg_priv_json, ErrorCode::CommonInvalidParam5, RevocationRegistryDefinitionPrivate);
+    check_useful_c_callback!(cb, ErrorCode::CommonInvalidParam6);
+    
+    trace!("indy_issuer_store_only_revoc_reg: entities >>> wallet_handle: {:?}, revoc_reg_id: {:?}, revoc_reg_def_json: {:?}, revoc_reg_entry_json: {:?}, revoc_reg_priv_json: {:?}",
+            wallet_handle, revoc_reg_id, revoc_reg_def_json, revoc_reg_json, revoc_reg_priv_json);
+    
+    let result = CommandExecutor::instance()
+            .send(Command::Anoncreds(
+                AnoncredsCommand::Issuer(
+                    IssuerCommand::StoreOnlyRevocationRegistry(
+                        wallet_handle,
+                        revoc_reg_id,
+                        revoc_reg_def_json,
+                        revoc_reg_json,
+                        revoc_reg_priv_json,
+                        Box::new(move |result| {
+                            let err = prepare_result!(result);
+                            trace!("indy_issuer_store_only_revoc_reg:");
+                            cb(command_handle, err)
+                        })
+                    ))));
+    
+    let res = prepare_result!(result);
+    
+    trace!("indy_issuer_store_only_revoc_reg: <<< res: {:?}", res);
+    
+    res
+}
+
+
 
 /// Create credential offer that will be used by Prover for
 /// credential request creation. Offer includes nonce and key correctness proof
@@ -711,7 +879,7 @@ pub extern fn indy_issuer_revoke_credential(command_handle: CommandHandle,
     res
 }
 
-/*/// Recover a credential identified by a cred_revoc_id (returned by indy_issuer_create_credential).
+/// Recover a credential identified by a cred_revoc_id (returned by indy_issuer_create_credential).
 ///
 /// The corresponding credential definition and revocation registry must be already
 /// created an stored into the wallet.
@@ -751,7 +919,9 @@ pub extern fn indy_issuer_recover_credential(command_handle: CommandHandle,
                                              cb: Option<extern fn(command_handle_: CommandHandle, err: ErrorCode,
                                                                   revoc_reg_delta_json: *const c_char,
                                              )>) -> ErrorCode {
-    check_useful_c_str!(rev_reg_id, ErrorCode::CommonInvalidParam4);
+
+
+    check_useful_validatable_string!(rev_reg_id, ErrorCode::CommonInvalidParam4, RevocationRegistryId);
     check_useful_c_str!(cred_revoc_id, ErrorCode::CommonInvalidParam5);
     check_useful_c_callback!(cb, ErrorCode::CommonInvalidParam6);
 
@@ -771,7 +941,7 @@ pub extern fn indy_issuer_recover_credential(command_handle: CommandHandle,
                 ))));
 
     prepare_result!(result)
-}*/
+}
 
 /// Merge two revocation registry deltas (returned by indy_issuer_create_credential or indy_issuer_revoke_credential) to accumulate common delta.
 /// Send common delta to ledger to reduce the load.
