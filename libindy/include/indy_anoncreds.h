@@ -65,6 +65,44 @@ extern "C" {
                                                                                     const char*   revoc_reg_entry_json)
                                                                );
 
+    extern indy_error_t indy_issuer_check_revoc_reg_exists(indy_handle_t command_handle,
+                                          wallet_handle_t wallet_handle,
+                                          const char* issuer_did,
+                                          const char* revoc_reg_type,
+                                          const char* tag,
+                                          const char* cred_def_id,
+                                          void  (*cb)(indy_handle_t command_handle_, 
+						      indy_error_t  err,
+                                                      const char* reg_info_json)
+		    );
+
+    extern indy_error_t indy_issuer_create_only_revoc_reg(indy_handle_t command_handle,
+                                                     const char* issuer_did,
+                                                     const char* revoc_def_type,
+                                                     const char* tag,
+                                                     const char* cred_def_json,
+                                                     const char* config_json,
+                                                     indy_handle_t tails_writer_handle,
+                                                     void (*cb)(indy_handle_t command_handle_, 
+							        indy_error_t err,
+                                                                const char* revoc_reg_id,
+                                                                const char* revoc_reg_def_json,
+                                                                const char* revoc_reg_entry_json,
+                                                                const char* revoc_reg_priv_json)
+		    );
+
+
+
+    extern indy_error_t indy_issuer_store_only_revoc_reg(indy_handle_t command_handle,
+                                                        indy_handle_t wallet_handle,
+                                                        const char* revoc_reg_id,
+                                                        const char* revoc_reg_def_json,
+                                                        const char* revoc_reg_json,
+                                                        const char* revoc_reg_priv_json,
+                                                        void (*cb)(indy_handle_t command_handle_, indy_error_t err)
+		    );
+
+
     extern indy_error_t indy_issuer_create_credential_offer(indy_handle_t command_handle,
                                                             indy_handle_t wallet_handle,
                                                             const char *  cred_def_id,
@@ -100,7 +138,7 @@ extern "C" {
                                                                            const char*   revoc_reg_delta_json)
                                                       );
 
-/*    extern indy_error_t indy_issuer_recover_credential(indy_handle_t command_handle,
+    extern indy_error_t indy_issuer_recover_credential(indy_handle_t command_handle,
                                                        indy_handle_t wallet_handle,
                                                        indy_handle_t blob_storage_reader_handle,
                                                        const char *  rev_reg_id,
@@ -109,7 +147,7 @@ extern "C" {
                                                        void           (*cb)(indy_handle_t command_handle_,
                                                                             indy_error_t  err,
                                                                             const char*   revoc_reg_delta_json)
-                                                       );*/
+                                                       );
 
 
     extern indy_error_t indy_issuer_merge_revocation_registry_deltas(indy_handle_t command_handle,
