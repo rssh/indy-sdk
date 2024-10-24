@@ -66,7 +66,7 @@ extern "C" {
                                                                );
 
     extern indy_error_t indy_issuer_check_revoc_reg_exists(indy_handle_t command_handle,
-                                          wallet_handle_t wallet_handle,
+                                          indy_handle_t wallet_handle,
                                           const char* issuer_did,
                                           const char* revoc_reg_type,
                                           const char* tag,
