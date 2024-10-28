@@ -144,7 +144,7 @@ pub enum IssuerCommand {
     CheckRevocationRegistryExists(
         WalletHandle,
         DidValue, // issuer did
-        String, // type
+        Option<String>, // type
         String, // tag
         CredentialDefinitionId, // revocation registry id
         Box<dyn Fn(IndyResult<Option<(String,String,String)>>) + Send>),  
