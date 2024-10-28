@@ -562,7 +562,7 @@ pub extern fn indy_issuer_check_revoc_reg_exists(command_handle: CommandHandle,
   trace!("indy_issuer_check_revoc_reg: >>> wallet_handle: {:?}, issuer_did: {:?}, cred_def_id: {:?}", wallet_handle, issuer_did, cred_def_id);
 
   check_useful_validatable_string!(issuer_did, ErrorCode::CommonInvalidParam3, DidValue);
-  check_useful_c_str!(type_, ErrorCode::CommonInvalidParam4);
+  check_useful_opt_c_str!(type_, ErrorCode::CommonInvalidParam4);
   check_useful_c_str!(tag, ErrorCode::CommonInvalidParam5);
   check_useful_validatable_string!(cred_def_id, ErrorCode::CommonInvalidParam6, CredentialDefinitionId);
   check_useful_c_callback!(cb, ErrorCode::CommonInvalidParam7);
