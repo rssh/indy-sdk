@@ -581,8 +581,14 @@ pub extern fn indy_issuer_check_revoc_reg_exists(command_handle: CommandHandle,
             trace!("indy_issuer_check_revoc_reg: reg_info_json: {:?}", opt_reg_info_json);
             match opt_reg_info_json {
               Some(reg_info_json) => {
-                let json_array = "[ ".to_string() + &reg_info_json.0 +"," + & reg_info_json.1 +"," + & reg_info_json.2 + " ]";
-                let cb_reg_info_json = ctypes::string_to_cstring(json_array);
+                // unparse and repack json into one structure
+                // parse json in strings:
+                let json0: serde_json::Value = serde_json::Value::String(reg_info_json.0);
+                let json1: serde_json::Value = serde_json::from_str::<serde_json::Value>(&reg_info_json.1).unwrap();
+                let json2: serde_json::Value = serde_json::from_str(&reg_info_json.2).unwrap();
+                // pack into one json array
+                let reg_info_json = json!([json0, json1, json2]).to_string();
+                let cb_reg_info_json = ctypes::string_to_cstring(reg_info_json);
                 cb(command_handle, err, cb_reg_info_json.as_ptr())
               },
               None => {
