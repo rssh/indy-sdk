@@ -257,8 +257,7 @@ impl IssuerCommandExecutor {
             }
             IssuerCommand::CheckRevocationRegistryExists(wallet_handle,issuer_did , _type, tag,  cred_def_id , cb ) => {
                 debug!(target: "issuer_command_executor", "CheckRevocationRegistryExists command received");
-
-                cb(self.check_revocation_registry_exists(wallet_handle, &issuer_did, Some(&_type), tag, &cred_def_id));
+                cb(self.check_revocation_registry_exists(wallet_handle, &issuer_did, _type.as_ref().map(String::as_str), &tag, &cred_def_id));
             },
             IssuerCommand::StoreOnlyRevocationRegistry(wallet_handle, rev_reg_id, rev_reg_def, rev_reg, rev_reg_priv, cb) => {
                 debug!(target: "issuer_command_executor", "StoreOnlyRevocationRegistry command received");
@@ -835,7 +834,7 @@ impl IssuerCommandExecutor {
         wallet_handle: WalletHandle,
         issuer_did: &DidValue,
         type_: Option<&str>,
-        tag: String,
+        tag: &str,
         cred_def_id: &CredentialDefinitionId
     ) -> IndyResult<Option<(String,String,String)>>{
         let rev_reg_type = if let Some(type_) = type_ {
