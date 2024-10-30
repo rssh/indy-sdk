@@ -560,7 +560,7 @@ pub extern fn indy_issuer_check_revoc_reg_exists(command_handle: CommandHandle,
                                           cb: Option<extern fn(command_handle_: CommandHandle, err: ErrorCode,
                                                                reg_info_json: * const c_char )>) -> ErrorCode {
   trace!("indy_issuer_check_revoc_reg: >>> wallet_handle: {:?}, issuer_did: {:?}, cred_def_id: {:?}", wallet_handle, issuer_did, cred_def_id);
-
+s
   check_useful_validatable_string!(issuer_did, ErrorCode::CommonInvalidParam3, DidValue);
   check_useful_opt_c_str!(type_, ErrorCode::CommonInvalidParam4);
   check_useful_c_str!(tag, ErrorCode::CommonInvalidParam5);
@@ -587,7 +587,7 @@ pub extern fn indy_issuer_check_revoc_reg_exists(command_handle: CommandHandle,
                 let json1: serde_json::Value = serde_json::from_str::<serde_json::Value>(&reg_info_json.1).unwrap();
                 let json2: serde_json::Value = serde_json::from_str(&reg_info_json.2).unwrap();
                 // pack into one json array
-                let reg_info_json = json!([json0, json1, json2]).to_string();
+                let reg_info_json = serde_json::Value::Array(vec![json0, json1, json2]).to_string();
                 let cb_reg_info_json = ctypes::string_to_cstring(reg_info_json);
                 cb(command_handle, err, cb_reg_info_json.as_ptr())
               },

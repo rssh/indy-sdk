@@ -61,7 +61,7 @@ pub extern fn indy_get_cred_def(command_handle: CommandHandle,
 
     let res = prepare_result!(result);
 
-    trace!("indy_get_schema: <<< res: {:?}", res);
+    trace!("indy_get_cred_def: <<< res: {:?}", res);
 
     res
 }
