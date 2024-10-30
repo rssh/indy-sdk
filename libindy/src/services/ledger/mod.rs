@@ -177,7 +177,7 @@ impl LedgerService {
 
         let ref_ = schema_id.0
             .parse::<i32>()
-            .to_indy(IndyErrorKind::InvalidStructure, format!("Schema ID is invalid number in: {:?}", id))?;
+            .to_indy(IndyErrorKind::InvalidStructure, format!("Schema ID {:?} is invalid number in: {:?}", schema_id.0, id))?;
 
         build_result!(GetCredDefOperation, identifier, ref_, signature_type, origin.to_short(), Some(tag))
     }
