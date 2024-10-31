@@ -527,13 +527,12 @@ pub extern fn indy_issuer_create_only_revoc_reg(command_handle: CommandHandle,
                     tails_writer_handle,
                     Box::new(move |result| {
                         let (err, revoc_reg_id, revoc_reg_def_json, revoc_reg_json, revoc_reg_priv_json) = prepare_result_4!(result, String::new(), String::new(), String::new(), String::new());
-                        trace!("indy_issuer_create_only_revoc_reg: revoc_reg_id: {:?}, revoc_reg_def_json: {:?}, revoc_reg_json: {:?} revoc_reg_priv_json: {:?} [1]",
+                        trace!("indy_issuer_create_only_revoc_reg: revoc_reg_id: {:?}, revoc_reg_def_json: {:?}, revoc_reg_json: {:?} revoc_reg_priv_json: {:?}",
                                revoc_reg_id, revoc_reg_def_json, revoc_reg_json, revoc_reg_priv_json);
                         let revoc_reg_id = ctypes::string_to_cstring(revoc_reg_id);
                         let revoc_reg_def_json = ctypes::string_to_cstring(revoc_reg_def_json);
                         let revoc_reg_json = ctypes::string_to_cstring(revoc_reg_json);
                         let revoc_reg_priv_json = ctypes::string_to_cstring(revoc_reg_priv_json);
-                        trace!("indy_issuer_create_only_revoc_reg: before callbacl, revoc_reg_json {:?}, revoc_reg_priv_json: {:?}", revoc_reg_json, revoc_reg_priv_json);
                         cb(command_handle, err, revoc_reg_id.as_ptr(), revoc_reg_def_json.as_ptr(), revoc_reg_json.as_ptr(), revoc_reg_priv_json.as_ptr())
                     })
                 ))));
